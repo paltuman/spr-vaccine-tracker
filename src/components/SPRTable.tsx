@@ -1,9 +1,11 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { buildInitialData, getDistrictStats, type ServiceRecord, type Zona } from "@/data/sprData";
 import {
   Search, Syringe, BarChart3, CheckCircle2, XCircle,
-  Download, Filter, MapPin, TrendingUp, Activity, Loader2, RefreshCw
+  Download, Filter, MapPin, TrendingUp, Activity, Loader2, RefreshCw,
+  LogOut, MessageSquare, Package
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import * as XLSX from "xlsx";
@@ -12,11 +14,11 @@ import autoTable from "jspdf-autotable";
 import { useToast } from "@/hooks/use-toast";
 
 /* ── Status Badge ── */
-const StatusBadge = ({ value, onChange, loading }: { value: boolean; onChange: () => void; loading?: boolean }) => (
+const StatusBadge = ({ value, onChange, disabled, loading }: { value: boolean; onChange: () => void; disabled?: boolean; loading?: boolean }) => (
   <button
     onClick={onChange}
-    disabled={loading}
-    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide transition-all duration-200 disabled:opacity-50 ${
+    disabled={disabled || loading}
+    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
       value
         ? "bg-success text-success-foreground shadow-md shadow-success/30 hover:shadow-lg"
         : "bg-danger text-danger-foreground shadow-md shadow-danger/30 hover:shadow-lg"
@@ -42,11 +44,7 @@ const PercentageBar = ({ value }: { value: number }) => {
 };
 
 /* ── Stat Card ── */
-const StatCard = ({
-  icon: Icon, label, value, sub, accent,
-}: {
-  icon: React.ElementType; label: string; value: string | number; sub?: string; accent?: string;
-}) => (
+const StatCard = ({ icon: Icon, label, value, sub, accent }: { icon: React.ElementType; label: string; value: string | number; sub?: string; accent?: string }) => (
   <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
     <div className={`p-2 rounded-lg ${accent ?? "bg-primary/10"}`}>
       <Icon className={accent ? "text-card-foreground" : "text-primary"} size={18} />
@@ -60,6 +58,64 @@ const StatCard = ({
   </div>
 );
 
+/* ── Observaciones Popover ── */
+const ObservacionesCell = ({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) => {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(value);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setText(value); }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        if (text !== value) onChange(text);
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, text, value, onChange]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => !disabled && setOpen(!open)}
+        disabled={disabled}
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-50 ${
+          value ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+        } hover:bg-primary/20`}
+      >
+        <MessageSquare size={12} />
+        {value ? (value.length > 15 ? value.slice(0, 14) + "…" : value) : "Agregar"}
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-card border border-border rounded-xl shadow-lg p-3">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Escribir observación..."
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <button onClick={() => { setText(value); setOpen(false); }} className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+              Cancelar
+            </button>
+            <button
+              onClick={() => { onChange(text); setOpen(false); }}
+              className="px-3 py-1 text-xs rounded-lg bg-primary text-primary-foreground font-medium"
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CHART_COLORS = ["hsl(142,71%,45%)", "hsl(0,84%,60%)"];
 const ZONE_COLORS: Record<Zona, string> = {
   "SAN PEDRO NORTE": "hsl(210,80%,55%)",
@@ -69,8 +125,16 @@ const ZONE_COLORS: Record<Zona, string> = {
 type FilterZona = "TODAS" | Zona;
 type FilterDisp = "TODOS" | "CON_DISP" | "SIN_DISP";
 
+interface DbRecord extends ServiceRecord {
+  recepcionado: boolean;
+  observaciones: string;
+}
+
 export default function SPRTable() {
-  const [records, setRecords] = useState<ServiceRecord[]>([]);
+  const { user, signOut } = useAuth();
+  const isAuthenticated = !!user;
+
+  const [records, setRecords] = useState<DbRecord[]>([]);
   const [dbIds, setDbIds] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -79,7 +143,6 @@ export default function SPRTable() {
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
   const { toast } = useToast();
 
-  // Load data from Supabase
   const loadData = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -90,14 +153,14 @@ export default function SPRTable() {
       .order("servicio");
 
     if (error || !data || data.length === 0) {
-      // Fallback to local data
-      setRecords(buildInitialData());
+      const fallback = buildInitialData().map((r) => ({ ...r, recepcionado: false, observaciones: "" }));
+      setRecords(fallback);
       setLoading(false);
       return;
     }
 
     const ids = new Map<string, string>();
-    const recs: ServiceRecord[] = data.map((row) => {
+    const recs: DbRecord[] = data.map((row) => {
       ids.set(`${row.distrito}|${row.servicio}`, row.id);
       return {
         distrito: row.distrito,
@@ -105,6 +168,8 @@ export default function SPRTable() {
         zona: row.zona as Zona,
         disponibilidad: row.disponibilidad,
         despachado: row.despachado,
+        recepcionado: row.recepcionado,
+        observaciones: row.observaciones ?? "",
       };
     });
     setDbIds(ids);
@@ -112,20 +177,16 @@ export default function SPRTable() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  const toggle = useCallback(async (index: number, field: "disponibilidad" | "despachado") => {
+  const updateField = useCallback(async (index: number, field: string, value: boolean | string) => {
     const record = records[index];
-    const newValue = !record[field];
     const key = `${record.distrito}|${record.servicio}`;
     const dbId = dbIds.get(key);
 
-    // Optimistic update
     setRecords((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: newValue };
+      next[index] = { ...next[index], [field]: value };
       return next;
     });
 
@@ -133,14 +194,13 @@ export default function SPRTable() {
       setSaving(key);
       const { error } = await supabase
         .from("spr_servicios")
-        .update({ [field]: newValue })
+        .update({ [field]: value })
         .eq("id", dbId);
 
       if (error) {
-        // Revert
         setRecords((prev) => {
           const next = [...prev];
-          next[index] = { ...next[index], [field]: !newValue };
+          next[index] = { ...next[index], [field]: field === "observaciones" ? record.observaciones : !value };
           return next;
         });
         toast({ title: "Error al guardar", description: error.message, variant: "destructive" });
@@ -148,6 +208,14 @@ export default function SPRTable() {
       setSaving(null);
     }
   }, [records, dbIds, toast]);
+
+  const toggleField = useCallback((index: number, field: "disponibilidad" | "despachado" | "recepcionado") => {
+    updateField(index, field, !records[index][field]);
+  }, [records, updateField]);
+
+  const updateObservaciones = useCallback((index: number, text: string) => {
+    updateField(index, "observaciones", text);
+  }, [updateField]);
 
   const stats = useMemo(() => getDistrictStats(records), [records]);
 
@@ -169,11 +237,12 @@ export default function SPRTable() {
     const total = src.length;
     const conDisp = src.filter((r) => r.disponibilidad).length;
     const desp = src.filter((r) => r.despachado).length;
-    return { total, conDisp, desp, sinDisp: total - conDisp };
+    const recep = src.filter((r) => r.recepcionado).length;
+    return { total, conDisp, desp, sinDisp: total - conDisp, recep };
   }, [records, filterZona]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, Array<{ record: ServiceRecord; originalIndex: number }>>();
+    const map = new Map<string, Array<{ record: DbRecord; originalIndex: number }>>();
     filtered.forEach((r) => {
       const origIdx = records.indexOf(r);
       const arr = map.get(r.distrito) ?? [];
@@ -197,12 +266,15 @@ export default function SPRTable() {
     return arr;
   }, [stats, filterZona]);
 
-  /* ── Export ── */
+  const pct = (n: number) => globalStats.total > 0 ? ((n / globalStats.total) * 100).toFixed(1) : "0";
+
   const exportExcel = () => {
     const data = records.map((r) => ({
       Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio,
       "Disponibilidad SPR": r.disponibilidad ? "SÍ" : "NO",
       Despachado: r.despachado ? "SÍ" : "NO",
+      Recepcionado: r.recepcionado ? "SÍ" : "NO",
+      Observaciones: r.observaciones,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -216,10 +288,10 @@ export default function SPRTable() {
     doc.text("Control de Vacuna SPR — San Pedro", 14, 15);
     doc.setFontSize(10);
     doc.text(`Fecha: ${new Date().toLocaleDateString("es-PY")}`, 14, 22);
-    const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO"]);
+    const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
     autoTable(doc, {
-      head: [["Zona", "Distrito", "Servicio", "Disponibilidad SPR", "Despachado"]],
-      body: rows, startY: 28, styles: { fontSize: 7 }, headStyles: { fillColor: [30, 41, 59] },
+      head: [["Zona", "Distrito", "Servicio", "Disp. SPR", "Despachado", "Recepcionado", "Observaciones"]],
+      body: rows, startY: 28, styles: { fontSize: 6 }, headStyles: { fillColor: [30, 41, 59] },
       didParseCell: (data) => {
         if (data.section === "body") {
           const val = data.cell.raw as string;
@@ -241,7 +313,7 @@ export default function SPRTable() {
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -250,10 +322,15 @@ export default function SPRTable() {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">Control de Vacuna SPR</h1>
-              <p className="text-sm text-muted-foreground">Departamento de San Pedro — Monitoreo de disponibilidad</p>
+              <p className="text-sm text-muted-foreground">San Pedro — {isAuthenticated ? `Sesión: ${user?.email}` : "Solo lectura"}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {isAuthenticated && (
+              <button onClick={signOut} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
+                <LogOut size={16} /> Salir
+              </button>
+            )}
             <button onClick={loadData} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
               <RefreshCw size={16} /> Actualizar
             </button>
@@ -266,13 +343,19 @@ export default function SPRTable() {
           </div>
         </div>
 
+        {!isAuthenticated && (
+          <div className="bg-warning/10 border border-warning/30 rounded-xl px-4 py-3 mb-4 text-sm text-foreground">
+            ⚠️ Estás en modo lectura. <strong>Iniciá sesión</strong> para modificar los datos.
+          </div>
+        )}
+
         {/* Dashboard */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <div className="lg:col-span-1 grid grid-cols-2 gap-3">
             <StatCard icon={BarChart3} label="Total Servicios" value={globalStats.total} />
-            <StatCard icon={CheckCircle2} label="Con Disponibilidad" value={globalStats.conDisp} sub={`(${globalStats.total > 0 ? ((globalStats.conDisp / globalStats.total) * 100).toFixed(1) : 0}%)`} accent="bg-success" />
-            <StatCard icon={Syringe} label="Despachados" value={globalStats.desp} sub={`(${globalStats.total > 0 ? ((globalStats.desp / globalStats.total) * 100).toFixed(1) : 0}%)`} />
-            <StatCard icon={Activity} label="Sin Disponibilidad" value={globalStats.sinDisp} sub={`(${globalStats.total > 0 ? ((globalStats.sinDisp / globalStats.total) * 100).toFixed(1) : 0}%)`} accent="bg-danger" />
+            <StatCard icon={CheckCircle2} label="Con Disponibilidad" value={globalStats.conDisp} sub={`(${pct(globalStats.conDisp)}%)`} accent="bg-success" />
+            <StatCard icon={Syringe} label="Despachados" value={globalStats.desp} sub={`(${pct(globalStats.desp)}%)`} />
+            <StatCard icon={Package} label="Recepcionados" value={globalStats.recep} sub={`(${pct(globalStats.recep)}%)`} accent="bg-primary" />
           </div>
           <div className="bg-card border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
@@ -342,46 +425,60 @@ export default function SPRTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-table-header text-table-header-foreground">
-                <th className="text-left px-4 py-3 font-semibold">Zona</th>
-                <th className="text-left px-4 py-3 font-semibold">Distrito</th>
-                <th className="text-left px-4 py-3 font-semibold">Servicio</th>
-                <th className="text-center px-4 py-3 font-semibold">Disponibilidad SPR</th>
-                <th className="text-center px-4 py-3 font-semibold">Despachado</th>
-                <th className="text-left px-4 py-3 font-semibold min-w-[180px]">% Disponibilidad</th>
+                <th className="text-left px-3 py-3 font-semibold">Zona</th>
+                <th className="text-left px-3 py-3 font-semibold">Distrito</th>
+                <th className="text-left px-3 py-3 font-semibold">Servicio</th>
+                <th className="text-center px-3 py-3 font-semibold">Disp. SPR</th>
+                <th className="text-center px-3 py-3 font-semibold">Despachado</th>
+                <th className="text-center px-3 py-3 font-semibold">Recepcionado</th>
+                <th className="text-left px-3 py-3 font-semibold">Observaciones</th>
+                <th className="text-left px-3 py-3 font-semibold min-w-[150px]">% Disp.</th>
               </tr>
             </thead>
             <tbody>
               {Array.from(grouped.entries()).map(([distrito, items]) => {
                 const stat = stats.get(distrito);
-                const pct = stat ? (stat.conDisp / stat.total) * 100 : 0;
-                return items.map((item, idx) => (
-                  <tr key={item.originalIndex} className={`border-t border-border transition-colors hover:bg-accent/50 ${idx % 2 === 0 ? "bg-card" : "bg-table-stripe"}`}>
-                    {idx === 0 && (
-                      <td className="px-4 py-2.5 font-medium text-xs text-muted-foreground bg-district-bg align-top" rowSpan={items.length}>
-                        <span className="inline-flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full" style={{ background: ZONE_COLORS[item.record.zona] }} />
-                          {item.record.zona === "SAN PEDRO NORTE" ? "Norte" : "Sur"}
-                        </span>
+                const distPct = stat ? (stat.conDisp / stat.total) * 100 : 0;
+                return items.map((item, idx) => {
+                  const key = `${item.record.distrito}|${item.record.servicio}`;
+                  const isSaving = saving === key;
+                  return (
+                    <tr key={item.originalIndex} className={`border-t border-border transition-colors hover:bg-accent/50 ${idx % 2 === 0 ? "bg-card" : "bg-table-stripe"}`}>
+                      {idx === 0 && (
+                        <td className="px-3 py-2.5 font-medium text-xs text-muted-foreground bg-district-bg align-top" rowSpan={items.length}>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full" style={{ background: ZONE_COLORS[item.record.zona] }} />
+                            {item.record.zona === "SAN PEDRO NORTE" ? "Norte" : "Sur"}
+                          </span>
+                        </td>
+                      )}
+                      {idx === 0 && <td className="px-3 py-2.5 font-bold text-foreground bg-district-bg align-top text-xs" rowSpan={items.length}>{distrito}</td>}
+                      <td className="px-3 py-2.5 text-foreground text-xs">{item.record.servicio}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <StatusBadge value={item.record.disponibilidad} onChange={() => toggleField(item.originalIndex, "disponibilidad")} disabled={!isAuthenticated} loading={isSaving} />
                       </td>
-                    )}
-                    {idx === 0 && <td className="px-4 py-2.5 font-bold text-foreground bg-district-bg align-top" rowSpan={items.length}>{distrito}</td>}
-                    <td className="px-4 py-2.5 text-foreground">{item.record.servicio}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <StatusBadge value={item.record.disponibilidad} onChange={() => toggle(item.originalIndex, "disponibilidad")} loading={saving === `${item.record.distrito}|${item.record.servicio}`} />
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <StatusBadge value={item.record.despachado} onChange={() => toggle(item.originalIndex, "despachado")} loading={saving === `${item.record.distrito}|${item.record.servicio}`} />
-                    </td>
-                    {idx === 0 && <td className="px-4 py-2.5 bg-district-bg align-middle" rowSpan={items.length}><PercentageBar value={pct} /></td>}
-                  </tr>
-                ));
+                      <td className="px-3 py-2.5 text-center">
+                        <StatusBadge value={item.record.despachado} onChange={() => toggleField(item.originalIndex, "despachado")} disabled={!isAuthenticated} loading={isSaving} />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <StatusBadge value={item.record.recepcionado} onChange={() => toggleField(item.originalIndex, "recepcionado")} disabled={!isAuthenticated} loading={isSaving} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <ObservacionesCell value={item.record.observaciones} onChange={(v) => updateObservaciones(item.originalIndex, v)} disabled={!isAuthenticated} />
+                      </td>
+                      {idx === 0 && <td className="px-3 py-2.5 bg-district-bg align-middle" rowSpan={items.length}><PercentageBar value={distPct} /></td>}
+                    </tr>
+                  );
+                });
               })}
             </tbody>
           </table>
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground text-center">
-          Los cambios se guardan automáticamente en la base de datos. Haga clic en SÍ/NO para actualizar.
+          {isAuthenticated
+            ? "Los cambios se guardan automáticamente. Haga clic en SÍ/NO para actualizar."
+            : "Iniciá sesión para poder modificar los datos."}
         </p>
       </div>
     </div>
