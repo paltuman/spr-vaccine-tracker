@@ -447,6 +447,7 @@ export default function SPRTable() {
                 <th className="text-left px-3 py-3 font-semibold">Zona</th>
                 <th className="text-left px-3 py-3 font-semibold">Distrito</th>
                 <th className="text-left px-3 py-3 font-semibold">Servicio</th>
+                <th className="text-left px-3 py-3 font-semibold">Lote</th>
                 <th className="text-center px-3 py-3 font-semibold">Disp. SPR</th>
                 <th className="text-center px-3 py-3 font-semibold">Despachado</th>
                 <th className="text-center px-3 py-3 font-semibold">Recepcionado</th>
