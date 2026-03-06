@@ -4,8 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { buildInitialData, getDistrictStats, type ServiceRecord, type Zona } from "@/data/sprData";
 import {
   Search, Syringe, BarChart3, CheckCircle2, XCircle,
-  Download, Filter, MapPin, TrendingUp, Activity, Loader2, RefreshCw,
-  LogOut, MessageSquare, Package
+  Download, Filter, MapPin, TrendingUp, Loader2, RefreshCw,
+  LogOut, MessageSquare, Package, Plus, Trash2, Boxes
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import * as XLSX from "xlsx";
@@ -16,7 +16,7 @@ import logoImg from "@/assets/logo.png";
 import headerBanner from "@/assets/header-banner.png";
 
 /* ── Status Badge ── */
-const StatusBadge = ({ value, onChange, disabled, loading }: { value: boolean; onChange: () => void; disabled?: boolean; loading?: boolean }) => (
+const StatusBadge = ({ value, label, onChange, disabled, loading }: { value: boolean; label?: [string, string]; onChange: () => void; disabled?: boolean; loading?: boolean }) => (
   <button
     onClick={onChange}
     disabled={disabled || loading}
@@ -27,7 +27,7 @@ const StatusBadge = ({ value, onChange, disabled, loading }: { value: boolean; o
     }`}
   >
     {value ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-    {value ? "SÍ" : "NO"}
+    {value ? (label?.[0] ?? "SÍ") : (label?.[1] ?? "NO")}
   </button>
 );
 
@@ -118,31 +118,95 @@ const ObservacionesCell = ({ value, onChange, disabled }: { value: string; onCha
   );
 };
 
-/* ── Lote Cell ── */
-const LoteCell = ({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) => {
-  const [text, setText] = useState(value);
-  useEffect(() => { setText(value); }, [value]);
+/* ── Lote Selector (dropdown) ── */
+const LoteSelector = ({ value, lotes, onChange, disabled }: { value: string; lotes: string[]; onChange: (v: string) => void; disabled?: boolean }) => (
+  <select
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    disabled={disabled}
+    className="w-28 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+  >
+    <option value="">Sin lote</option>
+    {lotes.map((l) => <option key={l} value={l}>{l}</option>)}
+  </select>
+);
+
+/* ── Lote Manager (admin panel) ── */
+const LoteManager = ({ lotes, onAdd, onDelete }: { lotes: string[]; onAdd: (name: string) => void; onDelete: (name: string) => void }) => {
+  const [open, setOpen] = useState(false);
+  const [newLote, setNewLote] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleAdd = () => {
+    const trimmed = newLote.trim().toUpperCase();
+    if (trimmed && !lotes.includes(trimmed)) {
+      onAdd(trimmed);
+      setNewLote("");
+    }
+  };
+
   return (
-    <input
-      type="text"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => { if (text !== value) onChange(text); }}
-      disabled={disabled}
-      placeholder="—"
-      className="w-24 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
-    />
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors"
+      >
+        <Boxes size={16} /> Lotes
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full right-0 mt-1 w-72 bg-card border border-border rounded-xl shadow-lg p-4">
+          <h4 className="text-sm font-semibold text-foreground mb-3">Gestionar Lotes</h4>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              value={newLote}
+              onChange={(e) => setNewLote(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              placeholder="Nuevo lote..."
+              className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <button onClick={handleAdd} className="px-2 py-1.5 rounded-lg bg-primary text-primary-foreground">
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="max-h-40 overflow-y-auto space-y-1">
+            {lotes.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No hay lotes registrados</p>}
+            {lotes.map((l) => (
+              <div key={l} className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/50 text-xs text-foreground">
+                <span className="font-medium">{l}</span>
+                <button onClick={() => onDelete(l)} className="text-danger hover:text-danger/80 transition-colors">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
 const CHART_COLORS = ["hsl(142,71%,45%)", "hsl(0,84%,60%)"];
+const LOTE_COLORS = [
+  "hsl(210,80%,55%)", "hsl(38,92%,50%)", "hsl(142,71%,45%)", "hsl(0,84%,60%)",
+  "hsl(280,65%,55%)", "hsl(180,60%,45%)", "hsl(330,70%,55%)", "hsl(60,70%,45%)",
+];
 const ZONE_COLORS: Record<Zona, string> = {
   "SAN PEDRO NORTE": "hsl(210,80%,55%)",
   "SAN PEDRO SUR": "hsl(38,92%,50%)",
 };
 
 type FilterZona = "TODAS" | Zona;
-type FilterDisp = "TODOS" | "CON_DISP" | "SIN_DISP";
+type FilterDisp = "TODOS" | "ACTIVO" | "INACTIVO";
 type FilterLote = "TODOS" | string;
 
 interface DbRecord extends ServiceRecord {
@@ -157,6 +221,7 @@ export default function SPRTable() {
 
   const [records, setRecords] = useState<DbRecord[]>([]);
   const [dbIds, setDbIds] = useState<Map<string, string>>(new Map());
+  const [lotes, setLotes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -164,6 +229,32 @@ export default function SPRTable() {
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
   const [filterLote, setFilterLote] = useState<FilterLote>("TODOS");
   const { toast } = useToast();
+
+  const loadLotes = useCallback(async () => {
+    const { data } = await supabase.from("lotes").select("nombre").order("nombre");
+    if (data) setLotes(data.map((d) => d.nombre));
+  }, []);
+
+  const addLote = useCallback(async (nombre: string) => {
+    const { error } = await supabase.from("lotes").insert({ nombre });
+    if (error) {
+      toast({ title: "Error al crear lote", description: error.message, variant: "destructive" });
+    } else {
+      setLotes((prev) => [...prev, nombre].sort());
+      toast({ title: "Lote creado", description: nombre });
+    }
+  }, [toast]);
+
+  const deleteLote = useCallback(async (nombre: string) => {
+    const { error } = await supabase.from("lotes").delete().eq("nombre", nombre);
+    if (error) {
+      toast({ title: "Error al eliminar lote", description: error.message, variant: "destructive" });
+    } else {
+      setLotes((prev) => prev.filter((l) => l !== nombre));
+      // Clear lote from records that had it
+      setRecords((prev) => prev.map((r) => r.lote === nombre ? { ...r, lote: "" } : r));
+    }
+  }, [toast]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -200,7 +291,7 @@ export default function SPRTable() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadData(); loadLotes(); }, [loadData, loadLotes]);
 
   const updateField = useCallback(async (index: number, field: string, value: boolean | string) => {
     const record = records[index];
@@ -223,7 +314,7 @@ export default function SPRTable() {
       if (error) {
         setRecords((prev) => {
           const next = [...prev];
-          next[index] = { ...next[index], [field]: field === "observaciones" ? record.observaciones : !value };
+          next[index] = { ...next[index], [field]: field === "observaciones" || field === "lote" ? record[field as keyof DbRecord] : !value };
           return next;
         });
         toast({ title: "Error al guardar", description: error.message, variant: "destructive" });
@@ -245,8 +336,8 @@ export default function SPRTable() {
   const filtered = useMemo(() => {
     return records.filter((r) => {
       if (filterZona !== "TODAS" && r.zona !== filterZona) return false;
-      if (filterDisp === "CON_DISP" && !r.disponibilidad) return false;
-      if (filterDisp === "SIN_DISP" && r.disponibilidad) return false;
+      if (filterDisp === "ACTIVO" && !r.disponibilidad) return false;
+      if (filterDisp === "INACTIVO" && r.disponibilidad) return false;
       if (filterLote !== "TODOS" && r.lote !== filterLote) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -255,11 +346,6 @@ export default function SPRTable() {
       return true;
     });
   }, [records, search, filterZona, filterDisp, filterLote]);
-
-  const uniqueLotes = useMemo(() => {
-    const set = new Set(records.map((r) => r.lote).filter(Boolean));
-    return Array.from(set).sort();
-  }, [records]);
 
   const globalStats = useMemo(() => {
     const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
@@ -282,8 +368,8 @@ export default function SPRTable() {
   }, [filtered, records]);
 
   const pieData = useMemo(() => [
-    { name: "Con disponibilidad", value: globalStats.conDisp },
-    { name: "Sin disponibilidad", value: globalStats.sinDisp },
+    { name: "Activo", value: globalStats.conDisp },
+    { name: "Inactivo", value: globalStats.sinDisp },
   ], [globalStats]);
 
   const barData = useMemo(() => {
@@ -295,12 +381,32 @@ export default function SPRTable() {
     return arr;
   }, [stats, filterZona]);
 
+  /* ── Lote Stats ── */
+  const loteStats = useMemo(() => {
+    const map = new Map<string, { total: number; activos: number; despachados: number; recepcionados: number }>();
+    const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
+    src.forEach((r) => {
+      if (!r.lote) return;
+      const s = map.get(r.lote) ?? { total: 0, activos: 0, despachados: 0, recepcionados: 0 };
+      s.total++;
+      if (r.disponibilidad) s.activos++;
+      if (r.despachado) s.despachados++;
+      if (r.recepcionado) s.recepcionados++;
+      map.set(r.lote, s);
+    });
+    return Array.from(map.entries()).map(([lote, s]) => ({
+      lote,
+      ...s,
+      pctActivo: s.total > 0 ? (s.activos / s.total) * 100 : 0,
+    }));
+  }, [records, filterZona]);
+
   const pct = (n: number) => globalStats.total > 0 ? ((n / globalStats.total) * 100).toFixed(1) : "0";
 
   const exportExcel = () => {
     const data = records.map((r) => ({
       Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio, Lote: r.lote,
-      "Disponibilidad SPR": r.disponibilidad ? "SÍ" : "NO",
+      "Estado (Activo)": r.disponibilidad ? "ACTIVO" : "INACTIVO",
       Despachado: r.despachado ? "SÍ" : "NO",
       Recepcionado: r.recepcionado ? "SÍ" : "NO",
       Observaciones: r.observaciones,
@@ -317,15 +423,15 @@ export default function SPRTable() {
     doc.text("Control de Vacuna SPR — San Pedro", 14, 15);
     doc.setFontSize(10);
     doc.text(`Fecha: ${new Date().toLocaleDateString("es-PY")}`, 14, 22);
-      const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.lote, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
+    const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.lote, r.disponibilidad ? "ACTIVO" : "INACTIVO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
     autoTable(doc, {
-      head: [["Zona", "Distrito", "Servicio", "Lote", "Disp. SPR", "Despachado", "Recepcionado", "Observaciones"]],
+      head: [["Zona", "Distrito", "Servicio", "Lote", "Estado", "Despachado", "Recepcionado", "Observaciones"]],
       body: rows, startY: 28, styles: { fontSize: 6 }, headStyles: { fillColor: [30, 41, 59] },
       didParseCell: (data) => {
         if (data.section === "body") {
           const val = data.cell.raw as string;
-          if (val === "SÍ") { data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fontStyle = "bold"; }
-          else if (val === "NO") { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = "bold"; }
+          if (val === "ACTIVO" || val === "SÍ") { data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fontStyle = "bold"; }
+          else if (val === "INACTIVO" || val === "NO") { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = "bold"; }
         }
       },
     });
@@ -358,11 +464,14 @@ export default function SPRTable() {
           </div>
           <div className="flex gap-2 flex-wrap">
             {isAuthenticated && (
-              <button onClick={signOut} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
-                <LogOut size={16} /> Salir
-              </button>
+              <>
+                <LoteManager lotes={lotes} onAdd={addLote} onDelete={deleteLote} />
+                <button onClick={signOut} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
+                  <LogOut size={16} /> Salir
+                </button>
+              </>
             )}
-            <button onClick={loadData} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
+            <button onClick={() => { loadData(); loadLotes(); }} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
               <RefreshCw size={16} /> Actualizar
             </button>
             <button onClick={exportExcel} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-semibold hover:opacity-90 transition-opacity">
@@ -384,13 +493,13 @@ export default function SPRTable() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <div className="lg:col-span-1 grid grid-cols-2 gap-3">
             <StatCard icon={BarChart3} label="Total Servicios" value={globalStats.total} />
-            <StatCard icon={CheckCircle2} label="Con Disponibilidad" value={globalStats.conDisp} sub={`(${pct(globalStats.conDisp)}%)`} accent="bg-success" />
+            <StatCard icon={CheckCircle2} label="Activos" value={globalStats.conDisp} sub={`(${pct(globalStats.conDisp)}%)`} accent="bg-success" />
             <StatCard icon={Syringe} label="Despachados" value={globalStats.desp} sub={`(${pct(globalStats.desp)}%)`} />
             <StatCard icon={Package} label="Recepcionados" value={globalStats.recep} sub={`(${pct(globalStats.recep)}%)`} accent="bg-primary" />
           </div>
           <div className="bg-card border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-              <TrendingUp size={14} className="text-primary" /> Disponibilidad General
+              <TrendingUp size={14} className="text-primary" /> Estado General
             </h3>
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
@@ -401,13 +510,13 @@ export default function SPRTable() {
               </PieChart>
             </ResponsiveContainer>
             <div className="flex justify-center gap-4 text-xs mt-1">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-success" /> Con disp.</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-danger" /> Sin disp.</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-success" /> Activo</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-danger" /> Inactivo</span>
             </div>
           </div>
           <div className="bg-card border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-              <MapPin size={14} className="text-primary" /> % Disponibilidad por Distrito
+              <MapPin size={14} className="text-primary" /> % Activos por Distrito
             </h3>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
@@ -427,14 +536,66 @@ export default function SPRTable() {
           </div>
         </div>
 
+        {/* Lote Dashboard */}
+        {loteStats.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-4 mb-6">
+            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Boxes size={14} className="text-primary" /> Estadísticas por Lote
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <ResponsiveContainer width="100%" height={Math.max(120, loteStats.length * 40)}>
+                  <BarChart data={loteStats} layout="vertical" margin={{ left: 0, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="lote" width={80} tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+                    <Bar dataKey="pctActivo" name="% Activo" radius={[0, 4, 4, 0]}>
+                      {loteStats.map((_, i) => <Cell key={i} fill={LOTE_COLORS[i % LOTE_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 px-2 font-semibold text-muted-foreground">Lote</th>
+                      <th className="text-center py-2 px-2 font-semibold text-muted-foreground">Servicios</th>
+                      <th className="text-center py-2 px-2 font-semibold text-muted-foreground">Activos</th>
+                      <th className="text-center py-2 px-2 font-semibold text-muted-foreground">Despach.</th>
+                      <th className="text-center py-2 px-2 font-semibold text-muted-foreground">Recep.</th>
+                      <th className="text-right py-2 px-2 font-semibold text-muted-foreground">% Activo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loteStats.map((ls) => (
+                      <tr key={ls.lote} className="border-b border-border/50 hover:bg-accent/30">
+                        <td className="py-1.5 px-2 font-bold text-foreground">{ls.lote}</td>
+                        <td className="py-1.5 px-2 text-center text-foreground">{ls.total}</td>
+                        <td className="py-1.5 px-2 text-center text-success font-semibold">{ls.activos}</td>
+                        <td className="py-1.5 px-2 text-center text-foreground">{ls.despachados}</td>
+                        <td className="py-1.5 px-2 text-center text-foreground">{ls.recepcionados}</td>
+                        <td className="py-1.5 px-2 text-right">
+                          <PercentageBar value={ls.pctActivo} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-            <input type="text" placeholder="Buscar distrito o servicio..." value={search} onChange={(e) => setSearch(e.target.value)}
+            <input type="text" placeholder="Buscar distrito, servicio o lote..." value={search} onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Filter size={16} className="text-muted-foreground" />
             <select value={filterZona} onChange={(e) => setFilterZona(e.target.value as FilterZona)}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
@@ -445,13 +606,13 @@ export default function SPRTable() {
             <select value={filterDisp} onChange={(e) => setFilterDisp(e.target.value as FilterDisp)}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="TODOS">Todos los estados</option>
-              <option value="CON_DISP">Con disponibilidad</option>
-              <option value="SIN_DISP">Sin disponibilidad</option>
+              <option value="ACTIVO">Activo</option>
+              <option value="INACTIVO">Inactivo</option>
             </select>
             <select value={filterLote} onChange={(e) => setFilterLote(e.target.value)}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="TODOS">Todos los lotes</option>
-              {uniqueLotes.map((l) => <option key={l} value={l}>{l}</option>)}
+              {lotes.map((l) => <option key={l} value={l}>{l}</option>)}
             </select>
           </div>
         </div>
@@ -465,11 +626,11 @@ export default function SPRTable() {
                 <th className="text-left px-3 py-3 font-semibold">Distrito</th>
                 <th className="text-left px-3 py-3 font-semibold">Servicio</th>
                 <th className="text-left px-3 py-3 font-semibold">Lote</th>
-                <th className="text-center px-3 py-3 font-semibold">Disp. SPR</th>
+                <th className="text-center px-3 py-3 font-semibold">Estado</th>
                 <th className="text-center px-3 py-3 font-semibold">Despachado</th>
                 <th className="text-center px-3 py-3 font-semibold">Recepcionado</th>
                 <th className="text-left px-3 py-3 font-semibold">Observaciones</th>
-                <th className="text-left px-3 py-3 font-semibold min-w-[150px]">% Disp.</th>
+                <th className="text-left px-3 py-3 font-semibold min-w-[150px]">% Activo</th>
               </tr>
             </thead>
             <tbody>
@@ -492,10 +653,10 @@ export default function SPRTable() {
                       {idx === 0 && <td className="px-3 py-2.5 font-bold text-foreground bg-district-bg align-top text-xs" rowSpan={items.length}>{distrito}</td>}
                       <td className="px-3 py-2.5 text-foreground text-xs">{item.record.servicio}</td>
                       <td className="px-3 py-2.5">
-                        <LoteCell value={item.record.lote} onChange={(v) => updateField(item.originalIndex, "lote", v)} disabled={!isAuthenticated} />
+                        <LoteSelector value={item.record.lote} lotes={lotes} onChange={(v) => updateField(item.originalIndex, "lote", v)} disabled={!isAuthenticated} />
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <StatusBadge value={item.record.disponibilidad} onChange={() => toggleField(item.originalIndex, "disponibilidad")} disabled={!isAuthenticated} loading={isSaving} />
+                        <StatusBadge value={item.record.disponibilidad} label={["ACTIVO", "INACTIVO"]} onChange={() => toggleField(item.originalIndex, "disponibilidad")} disabled={!isAuthenticated} loading={isSaving} />
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <StatusBadge value={item.record.despachado} onChange={() => toggleField(item.originalIndex, "despachado")} disabled={!isAuthenticated} loading={isSaving} />
@@ -517,7 +678,7 @@ export default function SPRTable() {
 
         <p className="mt-3 text-xs text-muted-foreground text-center">
           {isAuthenticated
-            ? "Los cambios se guardan automáticamente. Haga clic en SÍ/NO para actualizar."
+            ? "Los cambios se guardan automáticamente. Haga clic en ACTIVO/INACTIVO para actualizar el estado."
             : "Iniciá sesión para poder modificar los datos."}
         </p>
       </div>
