@@ -282,7 +282,7 @@ export default function SPRTable() {
 
   const exportExcel = () => {
     const data = records.map((r) => ({
-      Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio,
+      Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio, Lote: r.lote,
       "Disponibilidad SPR": r.disponibilidad ? "SÍ" : "NO",
       Despachado: r.despachado ? "SÍ" : "NO",
       Recepcionado: r.recepcionado ? "SÍ" : "NO",
