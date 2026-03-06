@@ -175,6 +175,7 @@ export default function SPRTable() {
         despachado: row.despachado,
         recepcionado: row.recepcionado,
         observaciones: row.observaciones ?? "",
+        lote: row.lote ?? "",
       };
     });
     setDbIds(ids);
