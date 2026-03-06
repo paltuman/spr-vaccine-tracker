@@ -12,6 +12,8 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useToast } from "@/hooks/use-toast";
+import logoImg from "@/assets/logo.png";
+import headerBanner from "@/assets/header-banner.png";
 
 /* ── Status Badge ── */
 const StatusBadge = ({ value, onChange, disabled, loading }: { value: boolean; onChange: () => void; disabled?: boolean; loading?: boolean }) => (
