@@ -118,6 +118,23 @@ const ObservacionesCell = ({ value, onChange, disabled }: { value: string; onCha
   );
 };
 
+/* ── Lote Cell ── */
+const LoteCell = ({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) => {
+  const [text, setText] = useState(value);
+  useEffect(() => { setText(value); }, [value]);
+  return (
+    <input
+      type="text"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => { if (text !== value) onChange(text); }}
+      disabled={disabled}
+      placeholder="—"
+      className="w-24 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+    />
+  );
+};
+
 const CHART_COLORS = ["hsl(142,71%,45%)", "hsl(0,84%,60%)"];
 const ZONE_COLORS: Record<Zona, string> = {
   "SAN PEDRO NORTE": "hsl(210,80%,55%)",
