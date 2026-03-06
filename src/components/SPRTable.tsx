@@ -474,6 +474,16 @@ export default function SPRTable() {
                       )}
                       {idx === 0 && <td className="px-3 py-2.5 font-bold text-foreground bg-district-bg align-top text-xs" rowSpan={items.length}>{distrito}</td>}
                       <td className="px-3 py-2.5 text-foreground text-xs">{item.record.servicio}</td>
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="text"
+                          value={item.record.lote}
+                          onChange={(e) => updateField(item.originalIndex, "lote", e.target.value)}
+                          disabled={!isAuthenticated}
+                          placeholder="—"
+                          className="w-24 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+                        />
+                      </td>
                       <td className="px-3 py-2.5 text-center">
                         <StatusBadge value={item.record.disponibilidad} onChange={() => toggleField(item.originalIndex, "disponibilidad")} disabled={!isAuthenticated} loading={isSaving} />
                       </td>
