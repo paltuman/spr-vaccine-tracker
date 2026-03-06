@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      lotes: {
+        Row: {
+          created_at: string
+          id: string
+          nombre: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nombre: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nombre?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
