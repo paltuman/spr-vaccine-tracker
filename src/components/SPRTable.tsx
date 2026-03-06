@@ -1,19 +1,22 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { buildInitialData, getDistrictStats, type ServiceRecord, type Zona } from "@/data/sprData";
 import {
   Search, Syringe, BarChart3, CheckCircle2, XCircle,
-  Download, Filter, MapPin, TrendingUp, Activity
+  Download, Filter, MapPin, TrendingUp, Activity, Loader2, RefreshCw
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useToast } from "@/hooks/use-toast";
 
-/* ── Status Badge ─────────────────────────────── */
-const StatusBadge = ({ value, onChange }: { value: boolean; onChange: () => void }) => (
+/* ── Status Badge ── */
+const StatusBadge = ({ value, onChange, loading }: { value: boolean; onChange: () => void; loading?: boolean }) => (
   <button
     onClick={onChange}
-    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide transition-all duration-200 ${
+    disabled={loading}
+    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide transition-all duration-200 disabled:opacity-50 ${
       value
         ? "bg-success text-success-foreground shadow-md shadow-success/30 hover:shadow-lg"
         : "bg-danger text-danger-foreground shadow-md shadow-danger/30 hover:shadow-lg"
@@ -24,7 +27,7 @@ const StatusBadge = ({ value, onChange }: { value: boolean; onChange: () => void
   </button>
 );
 
-/* ── Percentage Bar ───────────────────────────── */
+/* ── Percentage Bar ── */
 const PercentageBar = ({ value }: { value: number }) => {
   const color = value >= 80 ? "bg-success" : value >= 50 ? "bg-warning" : "bg-danger";
   const textColor = value >= 80 ? "text-success" : value >= 50 ? "text-warning" : "text-danger";
@@ -38,7 +41,7 @@ const PercentageBar = ({ value }: { value: number }) => {
   );
 };
 
-/* ── Stat Card ────────────────────────────────── */
+/* ── Stat Card ── */
 const StatCard = ({
   icon: Icon, label, value, sub, accent,
 }: {
@@ -67,18 +70,84 @@ type FilterZona = "TODAS" | Zona;
 type FilterDisp = "TODOS" | "CON_DISP" | "SIN_DISP";
 
 export default function SPRTable() {
-  const [records, setRecords] = useState<ServiceRecord[]>(buildInitialData);
+  const [records, setRecords] = useState<ServiceRecord[]>([]);
+  const [dbIds, setDbIds] = useState<Map<string, string>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterZona, setFilterZona] = useState<FilterZona>("TODAS");
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
+  const { toast } = useToast();
 
-  const toggle = useCallback((index: number, field: "disponibilidad" | "despachado") => {
+  // Load data from Supabase
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("spr_servicios")
+      .select("*")
+      .order("zona")
+      .order("distrito")
+      .order("servicio");
+
+    if (error || !data || data.length === 0) {
+      // Fallback to local data
+      setRecords(buildInitialData());
+      setLoading(false);
+      return;
+    }
+
+    const ids = new Map<string, string>();
+    const recs: ServiceRecord[] = data.map((row) => {
+      ids.set(`${row.distrito}|${row.servicio}`, row.id);
+      return {
+        distrito: row.distrito,
+        servicio: row.servicio,
+        zona: row.zona as Zona,
+        disponibilidad: row.disponibilidad,
+        despachado: row.despachado,
+      };
+    });
+    setDbIds(ids);
+    setRecords(recs);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const toggle = useCallback(async (index: number, field: "disponibilidad" | "despachado") => {
+    const record = records[index];
+    const newValue = !record[field];
+    const key = `${record.distrito}|${record.servicio}`;
+    const dbId = dbIds.get(key);
+
+    // Optimistic update
     setRecords((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: !next[index][field] };
+      next[index] = { ...next[index], [field]: newValue };
       return next;
     });
-  }, []);
+
+    if (dbId) {
+      setSaving(key);
+      const { error } = await supabase
+        .from("spr_servicios")
+        .update({ [field]: newValue })
+        .eq("id", dbId);
+
+      if (error) {
+        // Revert
+        setRecords((prev) => {
+          const next = [...prev];
+          next[index] = { ...next[index], [field]: !newValue };
+          return next;
+        });
+        toast({ title: "Error al guardar", description: error.message, variant: "destructive" });
+      }
+      setSaving(null);
+    }
+  }, [records, dbIds, toast]);
 
   const stats = useMemo(() => getDistrictStats(records), [records]);
 
@@ -114,7 +183,6 @@ export default function SPRTable() {
     return map;
   }, [filtered, records]);
 
-  /* ── Chart data ── */
   const pieData = useMemo(() => [
     { name: "Con disponibilidad", value: globalStats.conDisp },
     { name: "Sin disponibilidad", value: globalStats.sinDisp },
@@ -132,9 +200,7 @@ export default function SPRTable() {
   /* ── Export ── */
   const exportExcel = () => {
     const data = records.map((r) => ({
-      Zona: r.zona,
-      Distrito: r.distrito,
-      Servicio: r.servicio,
+      Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio,
       "Disponibilidad SPR": r.disponibilidad ? "SÍ" : "NO",
       Despachado: r.despachado ? "SÍ" : "NO",
     }));
@@ -150,34 +216,28 @@ export default function SPRTable() {
     doc.text("Control de Vacuna SPR — San Pedro", 14, 15);
     doc.setFontSize(10);
     doc.text(`Fecha: ${new Date().toLocaleDateString("es-PY")}`, 14, 22);
-
-    const rows = records.map((r) => [
-      r.zona, r.distrito, r.servicio,
-      r.disponibilidad ? "SÍ" : "NO",
-      r.despachado ? "SÍ" : "NO",
-    ]);
-
+    const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO"]);
     autoTable(doc, {
       head: [["Zona", "Distrito", "Servicio", "Disponibilidad SPR", "Despachado"]],
-      body: rows,
-      startY: 28,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [30, 41, 59] },
+      body: rows, startY: 28, styles: { fontSize: 7 }, headStyles: { fillColor: [30, 41, 59] },
       didParseCell: (data) => {
         if (data.section === "body") {
           const val = data.cell.raw as string;
-          if (val === "SÍ") {
-            data.cell.styles.textColor = [22, 163, 74];
-            data.cell.styles.fontStyle = "bold";
-          } else if (val === "NO") {
-            data.cell.styles.textColor = [220, 38, 38];
-            data.cell.styles.fontStyle = "bold";
-          }
+          if (val === "SÍ") { data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fontStyle = "bold"; }
+          else if (val === "NO") { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = "bold"; }
         }
       },
     });
     doc.save("Control_SPR_San_Pedro.pdf");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="animate-spin text-primary" size={40} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -189,15 +249,14 @@ export default function SPRTable() {
               <Syringe className="text-primary-foreground" size={24} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">
-                Control de Vacuna SPR
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Departamento de San Pedro — Monitoreo de disponibilidad
-              </p>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">Control de Vacuna SPR</h1>
+              <p className="text-sm text-muted-foreground">Departamento de San Pedro — Monitoreo de disponibilidad</p>
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={loadData} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-accent transition-colors">
+              <RefreshCw size={16} /> Actualizar
+            </button>
             <button onClick={exportExcel} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-semibold hover:opacity-90 transition-opacity">
               <Download size={16} /> Excel
             </button>
@@ -209,15 +268,12 @@ export default function SPRTable() {
 
         {/* Dashboard */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          {/* Stats cards */}
           <div className="lg:col-span-1 grid grid-cols-2 gap-3">
             <StatCard icon={BarChart3} label="Total Servicios" value={globalStats.total} />
-            <StatCard icon={CheckCircle2} label="Con Disponibilidad" value={globalStats.conDisp} sub={`(${((globalStats.conDisp / globalStats.total) * 100).toFixed(1)}%)`} accent="bg-success" />
-            <StatCard icon={Syringe} label="Despachados" value={globalStats.desp} sub={`(${((globalStats.desp / globalStats.total) * 100).toFixed(1)}%)`} />
-            <StatCard icon={Activity} label="Sin Disponibilidad" value={globalStats.sinDisp} sub={`(${((globalStats.sinDisp / globalStats.total) * 100).toFixed(1)}%)`} accent="bg-danger" />
+            <StatCard icon={CheckCircle2} label="Con Disponibilidad" value={globalStats.conDisp} sub={`(${globalStats.total > 0 ? ((globalStats.conDisp / globalStats.total) * 100).toFixed(1) : 0}%)`} accent="bg-success" />
+            <StatCard icon={Syringe} label="Despachados" value={globalStats.desp} sub={`(${globalStats.total > 0 ? ((globalStats.desp / globalStats.total) * 100).toFixed(1) : 0}%)`} />
+            <StatCard icon={Activity} label="Sin Disponibilidad" value={globalStats.sinDisp} sub={`(${globalStats.total > 0 ? ((globalStats.sinDisp / globalStats.total) * 100).toFixed(1) : 0}%)`} accent="bg-danger" />
           </div>
-
-          {/* Pie chart */}
           <div className="bg-card border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <TrendingUp size={14} className="text-primary" /> Disponibilidad General
@@ -225,9 +281,7 @@ export default function SPRTable() {
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" paddingAngle={3}>
-                  {pieData.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i]} />
-                  ))}
+                  {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
@@ -237,8 +291,6 @@ export default function SPRTable() {
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-danger" /> Sin disp.</span>
             </div>
           </div>
-
-          {/* Bar chart */}
           <div className="bg-card border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <MapPin size={14} className="text-primary" /> % Disponibilidad por Distrito
@@ -250,9 +302,7 @@ export default function SPRTable() {
                 <YAxis type="category" dataKey="distrito" width={100} tick={{ fontSize: 8 }} />
                 <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
                 <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
-                  {barData.map((entry, i) => (
-                    <Cell key={i} fill={ZONE_COLORS[entry.zona]} />
-                  ))}
+                  {barData.map((entry, i) => <Cell key={i} fill={ZONE_COLORS[entry.zona]} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -267,30 +317,19 @@ export default function SPRTable() {
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-            <input
-              type="text"
-              placeholder="Buscar distrito o servicio..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
+            <input type="text" placeholder="Buscar distrito o servicio..." value={search} onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
           </div>
           <div className="flex items-center gap-2">
             <Filter size={16} className="text-muted-foreground" />
-            <select
-              value={filterZona}
-              onChange={(e) => setFilterZona(e.target.value as FilterZona)}
-              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
+            <select value={filterZona} onChange={(e) => setFilterZona(e.target.value as FilterZona)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="TODAS">Todas las zonas</option>
               <option value="SAN PEDRO NORTE">San Pedro Norte</option>
               <option value="SAN PEDRO SUR">San Pedro Sur</option>
             </select>
-            <select
-              value={filterDisp}
-              onChange={(e) => setFilterDisp(e.target.value as FilterDisp)}
-              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
+            <select value={filterDisp} onChange={(e) => setFilterDisp(e.target.value as FilterDisp)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="TODOS">Todos los estados</option>
               <option value="CON_DISP">Con disponibilidad</option>
               <option value="SIN_DISP">Sin disponibilidad</option>
@@ -316,10 +355,7 @@ export default function SPRTable() {
                 const stat = stats.get(distrito);
                 const pct = stat ? (stat.conDisp / stat.total) * 100 : 0;
                 return items.map((item, idx) => (
-                  <tr
-                    key={item.originalIndex}
-                    className={`border-t border-border transition-colors hover:bg-accent/50 ${idx % 2 === 0 ? "bg-card" : "bg-table-stripe"}`}
-                  >
+                  <tr key={item.originalIndex} className={`border-t border-border transition-colors hover:bg-accent/50 ${idx % 2 === 0 ? "bg-card" : "bg-table-stripe"}`}>
                     {idx === 0 && (
                       <td className="px-4 py-2.5 font-medium text-xs text-muted-foreground bg-district-bg align-top" rowSpan={items.length}>
                         <span className="inline-flex items-center gap-1">
@@ -328,23 +364,15 @@ export default function SPRTable() {
                         </span>
                       </td>
                     )}
-                    {idx === 0 && (
-                      <td className="px-4 py-2.5 font-bold text-foreground bg-district-bg align-top" rowSpan={items.length}>
-                        {distrito}
-                      </td>
-                    )}
+                    {idx === 0 && <td className="px-4 py-2.5 font-bold text-foreground bg-district-bg align-top" rowSpan={items.length}>{distrito}</td>}
                     <td className="px-4 py-2.5 text-foreground">{item.record.servicio}</td>
                     <td className="px-4 py-2.5 text-center">
-                      <StatusBadge value={item.record.disponibilidad} onChange={() => toggle(item.originalIndex, "disponibilidad")} />
+                      <StatusBadge value={item.record.disponibilidad} onChange={() => toggle(item.originalIndex, "disponibilidad")} loading={saving === `${item.record.distrito}|${item.record.servicio}`} />
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      <StatusBadge value={item.record.despachado} onChange={() => toggle(item.originalIndex, "despachado")} />
+                      <StatusBadge value={item.record.despachado} onChange={() => toggle(item.originalIndex, "despachado")} loading={saving === `${item.record.distrito}|${item.record.servicio}`} />
                     </td>
-                    {idx === 0 && (
-                      <td className="px-4 py-2.5 bg-district-bg align-middle" rowSpan={items.length}>
-                        <PercentageBar value={pct} />
-                      </td>
-                    )}
+                    {idx === 0 && <td className="px-4 py-2.5 bg-district-bg align-middle" rowSpan={items.length}><PercentageBar value={pct} /></td>}
                   </tr>
                 ));
               })}
@@ -353,7 +381,7 @@ export default function SPRTable() {
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground text-center">
-          Haga clic en los indicadores SÍ/NO para actualizar el estado. Los cambios se reflejan en el dashboard automáticamente.
+          Los cambios se guardan automáticamente en la base de datos. Haga clic en SÍ/NO para actualizar.
         </p>
       </div>
     </div>
