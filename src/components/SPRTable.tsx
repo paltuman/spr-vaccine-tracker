@@ -118,6 +118,23 @@ const ObservacionesCell = ({ value, onChange, disabled }: { value: string; onCha
   );
 };
 
+/* ── Lote Cell ── */
+const LoteCell = ({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) => {
+  const [text, setText] = useState(value);
+  useEffect(() => { setText(value); }, [value]);
+  return (
+    <input
+      type="text"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => { if (text !== value) onChange(text); }}
+      disabled={disabled}
+      placeholder="—"
+      className="w-24 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+    />
+  );
+};
+
 const CHART_COLORS = ["hsl(142,71%,45%)", "hsl(0,84%,60%)"];
 const ZONE_COLORS: Record<Zona, string> = {
   "SAN PEDRO NORTE": "hsl(210,80%,55%)",
@@ -126,10 +143,12 @@ const ZONE_COLORS: Record<Zona, string> = {
 
 type FilterZona = "TODAS" | Zona;
 type FilterDisp = "TODOS" | "CON_DISP" | "SIN_DISP";
+type FilterLote = "TODOS" | string;
 
 interface DbRecord extends ServiceRecord {
   recepcionado: boolean;
   observaciones: string;
+  lote: string;
 }
 
 export default function SPRTable() {
@@ -143,6 +162,7 @@ export default function SPRTable() {
   const [search, setSearch] = useState("");
   const [filterZona, setFilterZona] = useState<FilterZona>("TODAS");
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
+  const [filterLote, setFilterLote] = useState<FilterLote>("TODOS");
   const { toast } = useToast();
 
   const loadData = useCallback(async () => {
@@ -155,7 +175,7 @@ export default function SPRTable() {
       .order("servicio");
 
     if (error || !data || data.length === 0) {
-      const fallback = buildInitialData().map((r) => ({ ...r, recepcionado: false, observaciones: "" }));
+      const fallback = buildInitialData().map((r) => ({ ...r, recepcionado: false, observaciones: "", lote: "" }));
       setRecords(fallback);
       setLoading(false);
       return;
@@ -172,6 +192,7 @@ export default function SPRTable() {
         despachado: row.despachado,
         recepcionado: row.recepcionado,
         observaciones: row.observaciones ?? "",
+        lote: row.lote ?? "",
       };
     });
     setDbIds(ids);
@@ -226,13 +247,19 @@ export default function SPRTable() {
       if (filterZona !== "TODAS" && r.zona !== filterZona) return false;
       if (filterDisp === "CON_DISP" && !r.disponibilidad) return false;
       if (filterDisp === "SIN_DISP" && r.disponibilidad) return false;
+      if (filterLote !== "TODOS" && r.lote !== filterLote) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (!r.distrito.toLowerCase().includes(q) && !r.servicio.toLowerCase().includes(q)) return false;
+        if (!r.distrito.toLowerCase().includes(q) && !r.servicio.toLowerCase().includes(q) && !r.lote.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [records, search, filterZona, filterDisp]);
+  }, [records, search, filterZona, filterDisp, filterLote]);
+
+  const uniqueLotes = useMemo(() => {
+    const set = new Set(records.map((r) => r.lote).filter(Boolean));
+    return Array.from(set).sort();
+  }, [records]);
 
   const globalStats = useMemo(() => {
     const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
@@ -272,7 +299,7 @@ export default function SPRTable() {
 
   const exportExcel = () => {
     const data = records.map((r) => ({
-      Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio,
+      Zona: r.zona, Distrito: r.distrito, Servicio: r.servicio, Lote: r.lote,
       "Disponibilidad SPR": r.disponibilidad ? "SÍ" : "NO",
       Despachado: r.despachado ? "SÍ" : "NO",
       Recepcionado: r.recepcionado ? "SÍ" : "NO",
@@ -290,9 +317,9 @@ export default function SPRTable() {
     doc.text("Control de Vacuna SPR — San Pedro", 14, 15);
     doc.setFontSize(10);
     doc.text(`Fecha: ${new Date().toLocaleDateString("es-PY")}`, 14, 22);
-    const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
+      const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.lote, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
     autoTable(doc, {
-      head: [["Zona", "Distrito", "Servicio", "Disp. SPR", "Despachado", "Recepcionado", "Observaciones"]],
+      head: [["Zona", "Distrito", "Servicio", "Lote", "Disp. SPR", "Despachado", "Recepcionado", "Observaciones"]],
       body: rows, startY: 28, styles: { fontSize: 6 }, headStyles: { fillColor: [30, 41, 59] },
       didParseCell: (data) => {
         if (data.section === "body") {
@@ -421,6 +448,11 @@ export default function SPRTable() {
               <option value="CON_DISP">Con disponibilidad</option>
               <option value="SIN_DISP">Sin disponibilidad</option>
             </select>
+            <select value={filterLote} onChange={(e) => setFilterLote(e.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              <option value="TODOS">Todos los lotes</option>
+              {uniqueLotes.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
           </div>
         </div>
 
@@ -432,6 +464,7 @@ export default function SPRTable() {
                 <th className="text-left px-3 py-3 font-semibold">Zona</th>
                 <th className="text-left px-3 py-3 font-semibold">Distrito</th>
                 <th className="text-left px-3 py-3 font-semibold">Servicio</th>
+                <th className="text-left px-3 py-3 font-semibold">Lote</th>
                 <th className="text-center px-3 py-3 font-semibold">Disp. SPR</th>
                 <th className="text-center px-3 py-3 font-semibold">Despachado</th>
                 <th className="text-center px-3 py-3 font-semibold">Recepcionado</th>
@@ -458,6 +491,9 @@ export default function SPRTable() {
                       )}
                       {idx === 0 && <td className="px-3 py-2.5 font-bold text-foreground bg-district-bg align-top text-xs" rowSpan={items.length}>{distrito}</td>}
                       <td className="px-3 py-2.5 text-foreground text-xs">{item.record.servicio}</td>
+                      <td className="px-3 py-2.5">
+                        <LoteCell value={item.record.lote} onChange={(v) => updateField(item.originalIndex, "lote", v)} disabled={!isAuthenticated} />
+                      </td>
                       <td className="px-3 py-2.5 text-center">
                         <StatusBadge value={item.record.disponibilidad} onChange={() => toggleField(item.originalIndex, "disponibilidad")} disabled={!isAuthenticated} loading={isSaving} />
                       </td>
