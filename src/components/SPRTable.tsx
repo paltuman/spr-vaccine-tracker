@@ -494,7 +494,6 @@ export default function SPRTable() {
                       <td className="px-3 py-2.5">
                         <LoteCell value={item.record.lote} onChange={(v) => updateField(item.originalIndex, "lote", v)} disabled={!isAuthenticated} />
                       </td>
-                      </td>
                       <td className="px-3 py-2.5 text-center">
                         <StatusBadge value={item.record.disponibilidad} onChange={() => toggleField(item.originalIndex, "disponibilidad")} disabled={!isAuthenticated} loading={isSaving} />
                       </td>
