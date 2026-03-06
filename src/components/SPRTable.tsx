@@ -131,6 +131,7 @@ type FilterLote = "TODOS" | string;
 interface DbRecord extends ServiceRecord {
   recepcionado: boolean;
   observaciones: string;
+  lote: string;
 }
 
 export default function SPRTable() {
