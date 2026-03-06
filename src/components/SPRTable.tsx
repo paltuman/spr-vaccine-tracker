@@ -431,6 +431,11 @@ export default function SPRTable() {
               <option value="CON_DISP">Con disponibilidad</option>
               <option value="SIN_DISP">Sin disponibilidad</option>
             </select>
+            <select value={filterLote} onChange={(e) => setFilterLote(e.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              <option value="TODOS">Todos los lotes</option>
+              {uniqueLotes.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
           </div>
         </div>
 
