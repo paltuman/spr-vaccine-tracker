@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      spr_servicios: {
+        Row: {
+          despachado: boolean
+          disponibilidad: boolean
+          distrito: string
+          id: string
+          servicio: string
+          updated_at: string
+          zona: string
+        }
+        Insert: {
+          despachado?: boolean
+          disponibilidad?: boolean
+          distrito: string
+          id?: string
+          servicio: string
+          updated_at?: string
+          zona: string
+        }
+        Update: {
+          despachado?: boolean
+          disponibilidad?: boolean
+          distrito?: string
+          id?: string
+          servicio?: string
+          updated_at?: string
+          zona?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
