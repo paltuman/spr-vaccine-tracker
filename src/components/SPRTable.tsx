@@ -230,13 +230,19 @@ export default function SPRTable() {
       if (filterZona !== "TODAS" && r.zona !== filterZona) return false;
       if (filterDisp === "CON_DISP" && !r.disponibilidad) return false;
       if (filterDisp === "SIN_DISP" && r.disponibilidad) return false;
+      if (filterLote !== "TODOS" && r.lote !== filterLote) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (!r.distrito.toLowerCase().includes(q) && !r.servicio.toLowerCase().includes(q)) return false;
+        if (!r.distrito.toLowerCase().includes(q) && !r.servicio.toLowerCase().includes(q) && !r.lote.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [records, search, filterZona, filterDisp]);
+  }, [records, search, filterZona, filterDisp, filterLote]);
+
+  const uniqueLotes = useMemo(() => {
+    const set = new Set(records.map((r) => r.lote).filter(Boolean));
+    return Array.from(set).sort();
+  }, [records]);
 
   const globalStats = useMemo(() => {
     const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
