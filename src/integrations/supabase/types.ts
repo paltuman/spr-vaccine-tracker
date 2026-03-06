@@ -41,6 +41,7 @@ export type Database = {
           disponibilidad: boolean
           distrito: string
           id: string
+          lote: string
           observaciones: string | null
           recepcionado: boolean
           servicio: string
@@ -52,6 +53,7 @@ export type Database = {
           disponibilidad?: boolean
           distrito: string
           id?: string
+          lote?: string
           observaciones?: string | null
           recepcionado?: boolean
           servicio: string
@@ -63,6 +65,7 @@ export type Database = {
           disponibilidad?: boolean
           distrito?: string
           id?: string
+          lote?: string
           observaciones?: string | null
           recepcionado?: boolean
           servicio?: string

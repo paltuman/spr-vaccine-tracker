@@ -1,0 +1,1 @@
+ALTER TABLE public.spr_servicios ADD COLUMN lote TEXT DEFAULT '' NOT NULL;
