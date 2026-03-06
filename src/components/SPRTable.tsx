@@ -300,9 +300,9 @@ export default function SPRTable() {
     doc.text("Control de Vacuna SPR — San Pedro", 14, 15);
     doc.setFontSize(10);
     doc.text(`Fecha: ${new Date().toLocaleDateString("es-PY")}`, 14, 22);
-    const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
+      const rows = records.map((r) => [r.zona, r.distrito, r.servicio, r.lote, r.disponibilidad ? "SÍ" : "NO", r.despachado ? "SÍ" : "NO", r.recepcionado ? "SÍ" : "NO", r.observaciones]);
     autoTable(doc, {
-      head: [["Zona", "Distrito", "Servicio", "Disp. SPR", "Despachado", "Recepcionado", "Observaciones"]],
+      head: [["Zona", "Distrito", "Servicio", "Lote", "Disp. SPR", "Despachado", "Recepcionado", "Observaciones"]],
       body: rows, startY: 28, styles: { fontSize: 6 }, headStyles: { fillColor: [30, 41, 59] },
       didParseCell: (data) => {
         if (data.section === "body") {
