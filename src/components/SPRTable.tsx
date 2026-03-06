@@ -316,12 +316,14 @@ export default function SPRTable() {
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-[1400px] mx-auto">
+        {/* Header Banner */}
+        <div className="mb-4">
+          <img src={headerBanner} alt="Gobierno del Paraguay - Ministerio de Salud Pública" className="w-full max-h-16 object-contain" />
+        </div>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary">
-              <Syringe className="text-primary-foreground" size={24} />
-            </div>
+            <img src={logoImg} alt="Logo PAI" className="w-12 h-12 rounded-full object-cover shadow-md" />
             <div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">Control de Vacuna SPR</h1>
               <p className="text-sm text-muted-foreground">San Pedro — {isAuthenticated ? `Sesión: ${user?.email}` : "Solo lectura"}</p>
