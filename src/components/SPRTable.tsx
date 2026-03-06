@@ -145,6 +145,7 @@ export default function SPRTable() {
   const [search, setSearch] = useState("");
   const [filterZona, setFilterZona] = useState<FilterZona>("TODAS");
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
+  const [filterLote, setFilterLote] = useState<FilterLote>("TODOS");
   const { toast } = useToast();
 
   const loadData = useCallback(async () => {
