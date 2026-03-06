@@ -158,7 +158,7 @@ export default function SPRTable() {
       .order("servicio");
 
     if (error || !data || data.length === 0) {
-      const fallback = buildInitialData().map((r) => ({ ...r, recepcionado: false, observaciones: "" }));
+      const fallback = buildInitialData().map((r) => ({ ...r, recepcionado: false, observaciones: "", lote: "" }));
       setRecords(fallback);
       setLoading(false);
       return;
