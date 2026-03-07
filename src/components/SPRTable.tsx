@@ -208,6 +208,7 @@ const ZONE_COLORS: Record<Zona, string> = {
 type FilterZona = "TODAS" | Zona;
 type FilterDisp = "TODOS" | "ACTIVO" | "INACTIVO";
 type FilterLote = "TODOS" | string;
+type FilterDistrito = "TODOS" | string;
 
 interface DbRecord extends ServiceRecord {
   recepcionado: boolean;
@@ -228,6 +229,7 @@ export default function SPRTable() {
   const [filterZona, setFilterZona] = useState<FilterZona>("TODAS");
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
   const [filterLote, setFilterLote] = useState<FilterLote>("TODOS");
+  const [filterDistrito, setFilterDistrito] = useState<FilterDistrito>("TODOS");
   const { toast } = useToast();
 
   const loadLotes = useCallback(async () => {
@@ -333,9 +335,31 @@ export default function SPRTable() {
 
   const stats = useMemo(() => getDistrictStats(records), [records]);
 
+  const distritos = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach((r) => {
+      if (filterZona === "TODAS" || r.zona === filterZona) set.add(r.distrito);
+    });
+    return Array.from(set).sort();
+  }, [records, filterZona]);
+
+  const servicios = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach((r) => {
+      if (filterZona !== "TODAS" && r.zona !== filterZona) return;
+      if (filterDistrito !== "TODOS" && r.distrito !== filterDistrito) return;
+      set.add(r.servicio);
+    });
+    return Array.from(set).sort();
+  }, [records, filterZona, filterDistrito]);
+
+  const [filterServicio, setFilterServicio] = useState<string>("TODOS");
+
   const filtered = useMemo(() => {
     return records.filter((r) => {
       if (filterZona !== "TODAS" && r.zona !== filterZona) return false;
+      if (filterDistrito !== "TODOS" && r.distrito !== filterDistrito) return false;
+      if (filterServicio !== "TODOS" && r.servicio !== filterServicio) return false;
       if (filterDisp === "ACTIVO" && !r.disponibilidad) return false;
       if (filterDisp === "INACTIVO" && r.disponibilidad) return false;
       if (filterLote !== "TODOS" && r.lote !== filterLote) return false;
@@ -345,16 +369,16 @@ export default function SPRTable() {
       }
       return true;
     });
-  }, [records, search, filterZona, filterDisp, filterLote]);
+  }, [records, search, filterZona, filterDisp, filterLote, filterDistrito, filterServicio]);
 
   const globalStats = useMemo(() => {
-    const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
+    const src = filtered;
     const total = src.length;
     const conDisp = src.filter((r) => r.disponibilidad).length;
     const desp = src.filter((r) => r.despachado).length;
     const recep = src.filter((r) => r.recepcionado).length;
     return { total, conDisp, desp, sinDisp: total - conDisp, recep };
-  }, [records, filterZona]);
+  }, [filtered]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Array<{ record: DbRecord; originalIndex: number }>>();
@@ -373,19 +397,24 @@ export default function SPRTable() {
   ], [globalStats]);
 
   const barData = useMemo(() => {
+    const map = new Map<string, { total: number; conDisp: number; zona: Zona }>();
+    filtered.forEach((r) => {
+      const e = map.get(r.distrito) ?? { total: 0, conDisp: 0, zona: r.zona };
+      e.total++;
+      if (r.disponibilidad) e.conDisp++;
+      map.set(r.distrito, e);
+    });
     const arr: Array<{ distrito: string; pct: number; zona: Zona }> = [];
-    stats.forEach((v, k) => {
-      if (filterZona !== "TODAS" && v.zona !== filterZona) return;
+    map.forEach((v, k) => {
       arr.push({ distrito: k.length > 15 ? k.slice(0, 14) + "…" : k, pct: v.total > 0 ? (v.conDisp / v.total) * 100 : 0, zona: v.zona });
     });
     return arr;
-  }, [stats, filterZona]);
+  }, [filtered]);
 
   /* ── Lote Stats ── */
   const loteStats = useMemo(() => {
     const map = new Map<string, { total: number; activos: number; despachados: number; recepcionados: number }>();
-    const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
-    src.forEach((r) => {
+    filtered.forEach((r) => {
       if (!r.lote) return;
       const s = map.get(r.lote) ?? { total: 0, activos: 0, despachados: 0, recepcionados: 0 };
       s.total++;
@@ -399,7 +428,7 @@ export default function SPRTable() {
       ...s,
       pctActivo: s.total > 0 ? (s.activos / s.total) * 100 : 0,
     }));
-  }, [records, filterZona]);
+  }, [filtered]);
 
   const pct = (n: number) => globalStats.total > 0 ? ((n / globalStats.total) * 100).toFixed(1) : "0";
 
@@ -597,11 +626,21 @@ export default function SPRTable() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Filter size={16} className="text-muted-foreground" />
-            <select value={filterZona} onChange={(e) => setFilterZona(e.target.value as FilterZona)}
+            <select value={filterZona} onChange={(e) => { setFilterZona(e.target.value as FilterZona); setFilterDistrito("TODOS"); setFilterServicio("TODOS"); }}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="TODAS">Todas las zonas</option>
               <option value="SAN PEDRO NORTE">San Pedro Norte</option>
               <option value="SAN PEDRO SUR">San Pedro Sur</option>
+            </select>
+            <select value={filterDistrito} onChange={(e) => { setFilterDistrito(e.target.value); setFilterServicio("TODOS"); }}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 max-w-[200px]">
+              <option value="TODOS">Todos los distritos</option>
+              {distritos.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={filterServicio} onChange={(e) => setFilterServicio(e.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 max-w-[220px]">
+              <option value="TODOS">Todos los servicios</option>
+              {servicios.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <select value={filterDisp} onChange={(e) => setFilterDisp(e.target.value as FilterDisp)}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
