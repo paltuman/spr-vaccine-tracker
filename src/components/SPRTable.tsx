@@ -335,9 +335,31 @@ export default function SPRTable() {
 
   const stats = useMemo(() => getDistrictStats(records), [records]);
 
+  const distritos = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach((r) => {
+      if (filterZona === "TODAS" || r.zona === filterZona) set.add(r.distrito);
+    });
+    return Array.from(set).sort();
+  }, [records, filterZona]);
+
+  const servicios = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach((r) => {
+      if (filterZona !== "TODAS" && r.zona !== filterZona) return;
+      if (filterDistrito !== "TODOS" && r.distrito !== filterDistrito) return;
+      set.add(r.servicio);
+    });
+    return Array.from(set).sort();
+  }, [records, filterZona, filterDistrito]);
+
+  const [filterServicio, setFilterServicio] = useState<string>("TODOS");
+
   const filtered = useMemo(() => {
     return records.filter((r) => {
       if (filterZona !== "TODAS" && r.zona !== filterZona) return false;
+      if (filterDistrito !== "TODOS" && r.distrito !== filterDistrito) return false;
+      if (filterServicio !== "TODOS" && r.servicio !== filterServicio) return false;
       if (filterDisp === "ACTIVO" && !r.disponibilidad) return false;
       if (filterDisp === "INACTIVO" && r.disponibilidad) return false;
       if (filterLote !== "TODOS" && r.lote !== filterLote) return false;
@@ -347,7 +369,7 @@ export default function SPRTable() {
       }
       return true;
     });
-  }, [records, search, filterZona, filterDisp, filterLote]);
+  }, [records, search, filterZona, filterDisp, filterLote, filterDistrito, filterServicio]);
 
   const globalStats = useMemo(() => {
     const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
