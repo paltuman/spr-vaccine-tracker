@@ -372,13 +372,13 @@ export default function SPRTable() {
   }, [records, search, filterZona, filterDisp, filterLote, filterDistrito, filterServicio]);
 
   const globalStats = useMemo(() => {
-    const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
+    const src = filtered;
     const total = src.length;
     const conDisp = src.filter((r) => r.disponibilidad).length;
     const desp = src.filter((r) => r.despachado).length;
     const recep = src.filter((r) => r.recepcionado).length;
     return { total, conDisp, desp, sinDisp: total - conDisp, recep };
-  }, [records, filterZona]);
+  }, [filtered]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Array<{ record: DbRecord; originalIndex: number }>>();
