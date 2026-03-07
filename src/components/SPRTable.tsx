@@ -397,13 +397,19 @@ export default function SPRTable() {
   ], [globalStats]);
 
   const barData = useMemo(() => {
+    const map = new Map<string, { total: number; conDisp: number; zona: Zona }>();
+    filtered.forEach((r) => {
+      const e = map.get(r.distrito) ?? { total: 0, conDisp: 0, zona: r.zona };
+      e.total++;
+      if (r.disponibilidad) e.conDisp++;
+      map.set(r.distrito, e);
+    });
     const arr: Array<{ distrito: string; pct: number; zona: Zona }> = [];
-    stats.forEach((v, k) => {
-      if (filterZona !== "TODAS" && v.zona !== filterZona) return;
+    map.forEach((v, k) => {
       arr.push({ distrito: k.length > 15 ? k.slice(0, 14) + "…" : k, pct: v.total > 0 ? (v.conDisp / v.total) * 100 : 0, zona: v.zona });
     });
     return arr;
-  }, [stats, filterZona]);
+  }, [filtered]);
 
   /* ── Lote Stats ── */
   const loteStats = useMemo(() => {
