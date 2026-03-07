@@ -429,12 +429,6 @@ export default function SPRTable() {
       pctActivo: s.total > 0 ? (s.activos / s.total) * 100 : 0,
     }));
   }, [filtered]);
-    return Array.from(map.entries()).map(([lote, s]) => ({
-      lote,
-      ...s,
-      pctActivo: s.total > 0 ? (s.activos / s.total) * 100 : 0,
-    }));
-  }, [records, filterZona]);
 
   const pct = (n: number) => globalStats.total > 0 ? ((n / globalStats.total) * 100).toFixed(1) : "0";
 
