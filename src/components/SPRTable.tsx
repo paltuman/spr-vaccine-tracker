@@ -414,8 +414,7 @@ export default function SPRTable() {
   /* ── Lote Stats ── */
   const loteStats = useMemo(() => {
     const map = new Map<string, { total: number; activos: number; despachados: number; recepcionados: number }>();
-    const src = filterZona === "TODAS" ? records : records.filter((r) => r.zona === filterZona);
-    src.forEach((r) => {
+    filtered.forEach((r) => {
       if (!r.lote) return;
       const s = map.get(r.lote) ?? { total: 0, activos: 0, despachados: 0, recepcionados: 0 };
       s.total++;
@@ -424,6 +423,12 @@ export default function SPRTable() {
       if (r.recepcionado) s.recepcionados++;
       map.set(r.lote, s);
     });
+    return Array.from(map.entries()).map(([lote, s]) => ({
+      lote,
+      ...s,
+      pctActivo: s.total > 0 ? (s.activos / s.total) * 100 : 0,
+    }));
+  }, [filtered]);
     return Array.from(map.entries()).map(([lote, s]) => ({
       lote,
       ...s,
