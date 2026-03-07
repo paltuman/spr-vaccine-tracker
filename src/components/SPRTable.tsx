@@ -229,6 +229,7 @@ export default function SPRTable() {
   const [filterZona, setFilterZona] = useState<FilterZona>("TODAS");
   const [filterDisp, setFilterDisp] = useState<FilterDisp>("TODOS");
   const [filterLote, setFilterLote] = useState<FilterLote>("TODOS");
+  const [filterDistrito, setFilterDistrito] = useState<FilterDistrito>("TODOS");
   const { toast } = useToast();
 
   const loadLotes = useCallback(async () => {
