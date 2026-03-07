@@ -626,11 +626,21 @@ export default function SPRTable() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Filter size={16} className="text-muted-foreground" />
-            <select value={filterZona} onChange={(e) => setFilterZona(e.target.value as FilterZona)}
+            <select value={filterZona} onChange={(e) => { setFilterZona(e.target.value as FilterZona); setFilterDistrito("TODOS"); setFilterServicio("TODOS"); }}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="TODAS">Todas las zonas</option>
               <option value="SAN PEDRO NORTE">San Pedro Norte</option>
               <option value="SAN PEDRO SUR">San Pedro Sur</option>
+            </select>
+            <select value={filterDistrito} onChange={(e) => { setFilterDistrito(e.target.value); setFilterServicio("TODOS"); }}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 max-w-[200px]">
+              <option value="TODOS">Todos los distritos</option>
+              {distritos.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={filterServicio} onChange={(e) => setFilterServicio(e.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 max-w-[220px]">
+              <option value="TODOS">Todos los servicios</option>
+              {servicios.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <select value={filterDisp} onChange={(e) => setFilterDisp(e.target.value as FilterDisp)}
               className="px-3 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
