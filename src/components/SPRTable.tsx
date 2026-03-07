@@ -208,6 +208,7 @@ const ZONE_COLORS: Record<Zona, string> = {
 type FilterZona = "TODAS" | Zona;
 type FilterDisp = "TODOS" | "ACTIVO" | "INACTIVO";
 type FilterLote = "TODOS" | string;
+type FilterDistrito = "TODOS" | string;
 
 interface DbRecord extends ServiceRecord {
   recepcionado: boolean;
